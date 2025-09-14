@@ -87,9 +87,9 @@ real = secrets.database.password.get()    # 明示的に実値を取得
 
 ---
 
-## File Format — Local Source
+## File Format — Local Mocks
 
-**Filename**: `noctivault.local-store.yaml`
+**Filename**: `noctivault.local-store.yaml`（暗号化時は `noctivault.local-store.yaml.enc`）
 
 **Schema**:
 
@@ -197,9 +197,9 @@ CLI（事前処理ツール、仕様）
 
 ---
 
-## File Format — Local/Remote Reference
+## File Format — Reference
 
-**Location**: 同一ファイル（`noctivault.local-store.yaml`）内の `secret-refs` セクションに定義します。
+**Filename**: `noctivault.yaml`（平文）
 
 **Schema**
 
@@ -207,29 +207,24 @@ CLI（事前処理ツール、仕様）
 platform: google              # required
 gcp_project_id: my_proj       # required
 secret-refs:
-  - platform: google                 # required（local でも必須）
-    gcp_project_id: <string>         # required（local でも必須）
-    cast: my-var                     # required（最終パスの葉キー名）
+  - cast: my-var                     # required（最終パスの葉キー名）
     ref: <secret-name>               # required（Secret Manager 上の識別子）
     version: latest | <number>       # optional（未指定は latest と等価）
     type: str | int                  # optional（既定は str）。許容値以外はエラー。
 
   - key: my-group                    # optional（中間ノードのグループ名）
     children:
-      - platform: google
-        gcp_project_id: <string>
-        cast: my-python-var          # resolves to my-group.my-python-var
+      - cast: my-python-var          # resolves to my-group.my-python-var
         ref: <secret-name>
         version: latest | <number>
-        type: str | int              # optional（既定は str）。許容値以外はエラー。
+        type: str | int
 ```
 
 **Notes**
 
-* Local/Remote で **同一スキーマ** を使用します。`source==local` でも `platform` と `gcp_project_id` は必須です（remote のモックとして解決するため）。
+* `platform` と `gcp_project_id` はトップレベルで必須。各エントリ/children では省略可能で、トップレベル値が継承されます。
 * 当面は Google のみを対象とします（AWS/Azure フィールドは未サポート）。
 * `type` は各 leaf の型指定。許容値は `str` と `int` のみ。未指定は `str` として扱います。
-* 参考用の別ファイル（`noctivault.reference.yaml`）は将来の設計案であり、現行の実装では使用しません。
 
 ---
 

@@ -20,6 +20,8 @@ def test_resolver_resolves_refs_and_builds_tree_with_casts():
     )
     refs = ReferenceConfig.model_validate(
         {
+            "platform": "google",
+            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -42,7 +44,7 @@ def test_resolver_resolves_refs_and_builds_tree_with_casts():
                         }
                     ],
                 },
-            ]
+            ],
         }
     )
 
@@ -77,6 +79,8 @@ def test_resolver_duplicate_path_raises():
     )
     refs = ReferenceConfig.model_validate(
         {
+            "platform": "google",
+            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -92,7 +96,7 @@ def test_resolver_duplicate_path_raises():
                     "ref": "y",
                     "version": 1,
                 },
-            ]
+            ],
         }
     )
     provider = LocalMocksProvider.from_config(mocks)
@@ -118,6 +122,8 @@ def test_resolver_type_cast_error():
     )
     refs = ReferenceConfig.model_validate(
         {
+            "platform": "google",
+            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -127,7 +133,7 @@ def test_resolver_type_cast_error():
                     "version": 1,
                     "type": "int",
                 },
-            ]
+            ],
         }
     )
     provider = LocalMocksProvider.from_config(mocks)

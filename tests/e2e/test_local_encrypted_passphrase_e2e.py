@@ -27,10 +27,10 @@ def test_load_from_encrypted_local_store_passphrase(tmp_path: Path):
     (tmp_path / "noctivault.yaml").write_text(
         textwrap.dedent(
             """
+            platform: google
+            gcp_project_id: p
             secret-refs:
-              - platform: google
-                gcp_project_id: p
-                cast: password
+              - cast: password
                 ref: x
                 version: 1
             """

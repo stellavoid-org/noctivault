@@ -54,6 +54,8 @@ def test_reference_config_validation_and_defaults():
 
     cfg = ReferenceConfig.model_validate(
         {
+            "platform": "google",
+            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -70,7 +72,7 @@ def test_reference_config_validation_and_defaults():
                     "version": 3,
                     "type": "int",
                 },
-            ]
+            ],
         }
     )
     r0 = cfg.secret_refs[0]
@@ -92,6 +94,44 @@ def test_reference_config_validation_and_defaults():
                 ]
             }
         )
+
+
+def test_reference_config_inherits_top_level_platform_and_project():
+    from noctivault.schema.models import ReferenceConfig
+
+    cfg = ReferenceConfig.model_validate(
+        {
+            "platform": "google",
+            "gcp_project_id": "p",
+            "secret-refs": [
+                {
+                    # platform/gcp_project_id omitted; should inherit
+                    "cast": "x",
+                    "ref": "r",
+                    "version": 1,
+                },
+                {
+                    "key": "grp",
+                    "children": [
+                        {
+                            # also omitted here
+                            "cast": "y",
+                            "ref": "r2",
+                            "version": "latest",
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    flat = []
+    for e in cfg.secret_refs:
+        if hasattr(e, "children"):
+            flat.extend(e.children)
+        else:
+            flat.append(e)
+    assert {e.platform for e in flat} == {"google"}
+    assert {e.gcp_project_id for e in flat} == {"p"}
 
 
 def test_secret_mocks_version_must_be_int_and_required():
@@ -124,6 +164,8 @@ def test_secret_refs_version_int_or_latest():
 
     cfg = ReferenceConfig.model_validate(
         {
+            "platform": "google",
+            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -145,7 +187,7 @@ def test_secret_refs_version_int_or_latest():
                     "cast": "z",
                     "ref": "r3",
                 },  # default latest
-            ]
+            ],
         }
     )
     assert [e.version for e in cfg.secret_refs] == [1, "latest", "latest"]

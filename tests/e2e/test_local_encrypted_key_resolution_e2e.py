@@ -36,10 +36,10 @@ def test_key_resolution_settings_path(tmp_path: Path):
     (tmp_path / "noctivault.yaml").write_text(
         textwrap.dedent(
             """
+            platform: google
+            gcp_project_id: p
             secret-refs:
-              - platform: google
-                gcp_project_id: p
-                cast: password
+              - cast: password
                 ref: x
                 version: 1
             """
@@ -62,7 +62,7 @@ def test_key_resolution_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     key_path.write_bytes(key)
     write_enc(tmp_path, key)
     (tmp_path / "noctivault.yaml").write_text(
-        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        "platform: google\ngcp_project_id: p\nsecret-refs:\n- cast: password\n  ref: x\n  version: 1\n",
         encoding="utf-8",
     )
 
@@ -79,7 +79,7 @@ def test_key_resolution_local_file(tmp_path: Path):
     (tmp_path / "local.key").write_bytes(key)
     write_enc(tmp_path, key)
     (tmp_path / "noctivault.yaml").write_text(
-        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        "platform: google\ngcp_project_id: p\nsecret-refs:\n- cast: password\n  ref: x\n  version: 1\n",
         encoding="utf-8",
     )
 
@@ -99,7 +99,7 @@ def test_key_resolution_default_home(tmp_path: Path, monkeypatch: pytest.MonkeyP
     (cfg_dir / "local.key").write_bytes(key)
     write_enc(tmp_path, key)
     (tmp_path / "noctivault.yaml").write_text(
-        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        "platform: google\ngcp_project_id: p\nsecret-refs:\n- cast: password\n  ref: x\n  version: 1\n",
         encoding="utf-8",
     )
 
@@ -119,7 +119,7 @@ def test_wrong_key_raises(tmp_path: Path):
     wrong_path.write_bytes(wrong)
     write_enc(tmp_path, key)
     (tmp_path / "noctivault.yaml").write_text(
-        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        "platform: google\ngcp_project_id: p\nsecret-refs:\n- cast: password\n  ref: x\n  version: 1\n",
         encoding="utf-8",
     )
 

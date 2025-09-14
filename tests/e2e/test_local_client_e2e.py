@@ -35,6 +35,8 @@ def test_client_load_and_get_and_display_hash(tmp_path: Path):
     (tmp_path / "noctivault.yaml").write_text(
         textwrap.dedent(
             """
+            platform: google
+            gcp_project_id: p
             secret-refs:
               - platform: google
                 gcp_project_id: p
@@ -83,7 +85,10 @@ def test_client_get_missing_key_raises(tmp_path: Path):
         """,
     )
     # empty refs file
-    (tmp_path / "noctivault.yaml").write_text("secret-refs: []\n", encoding="utf-8")
+    (tmp_path / "noctivault.yaml").write_text(
+        "platform: google\ngcp_project_id: p\nsecret-refs: []\n",
+        encoding="utf-8",
+    )
     nv = Noctivault(NoctivaultSettings(source="local"))
     nv.load(local_store_path=str(tmp_path))
     with pytest.raises(KeyError):

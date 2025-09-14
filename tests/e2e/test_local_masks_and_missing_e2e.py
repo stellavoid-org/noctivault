@@ -29,10 +29,10 @@ def test_masks_in_to_dict_and_repr(tmp_path: Path):
     (tmp_path / "noctivault.yaml").write_text(
         textwrap.dedent(
             """
+            platform: google
+            gcp_project_id: p
             secret-refs:
-              - platform: google
-                gcp_project_id: p
-                cast: password
+              - cast: password
                 ref: pw
                 version: 1
             """
@@ -62,10 +62,10 @@ def test_missing_local_mock_raises(tmp_path: Path):
     (tmp_path / "noctivault.yaml").write_text(
         textwrap.dedent(
             """
+            platform: google
+            gcp_project_id: p
             secret-refs:
-              - platform: google
-                gcp_project_id: p
-                cast: sample
+              - cast: sample
                 ref: missing
                 version: 1
             """

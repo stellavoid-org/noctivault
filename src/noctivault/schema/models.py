@@ -91,9 +91,43 @@ class TopLevelConfig(BaseModel):
 
 
 class ReferenceConfig(BaseModel):
+    platform: str
+    gcp_project_id: str
     secret_refs: list[SecretRef | SecretGroup] = Field(alias="secret-refs")
 
     model_config = {
         "populate_by_name": True,
         "extra": "ignore",
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def _inherit_top_level(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        plat = data.get("platform")
+        proj = data.get("gcp_project_id")
+        refs = data.get("secret-refs")
+        if isinstance(refs, list) and plat and proj:
+            new_refs: list[Any] = []
+            for entry in refs:
+                if not isinstance(entry, dict):
+                    new_refs.append(entry)
+                    continue
+                if "key" in entry and "children" in entry and isinstance(entry["children"], list):
+                    children = []
+                    for ch in entry["children"]:
+                        if isinstance(ch, dict):
+                            ch = {**ch}
+                            ch.setdefault("platform", plat)
+                            ch.setdefault("gcp_project_id", proj)
+                        children.append(ch)
+                    entry = {**entry, "children": children}
+                else:
+                    e = {**entry}
+                    e.setdefault("platform", plat)
+                    e.setdefault("gcp_project_id", proj)
+                    entry = e
+                new_refs.append(entry)
+            data = {**data, "secret-refs": new_refs}
+        return data
