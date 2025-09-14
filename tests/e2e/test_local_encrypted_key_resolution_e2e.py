@@ -15,12 +15,6 @@ YAML_BASE = textwrap.dedent(
       - name: x
         value: "00123"
         version: 1
-    secret-refs:
-      - platform: google
-        gcp_project_id: p
-        cast: password
-        ref: x
-        version: 1
     """
 ).encode("utf-8")
 
@@ -38,6 +32,20 @@ def test_key_resolution_settings_path(tmp_path: Path):
     key_path = tmp_path / "custom.key"
     key_path.write_bytes(key)
     write_enc(tmp_path, key)
+    # refs
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
+            secret-refs:
+              - platform: google
+                gcp_project_id: p
+                cast: password
+                ref: x
+                version: 1
+            """
+        ),
+        encoding="utf-8",
+    )
 
     nv = Noctivault(
         NoctivaultSettings(source="local", local_enc=LocalEncSettings(key_file_path=str(key_path)))
@@ -53,6 +61,10 @@ def test_key_resolution_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     key_path = tmp_path / "env.key"
     key_path.write_bytes(key)
     write_enc(tmp_path, key)
+    (tmp_path / "noctivault.yaml").write_text(
+        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv("NOCTIVAULT_LOCAL_KEY_FILE", str(key_path))
     nv = Noctivault(NoctivaultSettings(source="local"))
@@ -66,6 +78,10 @@ def test_key_resolution_local_file(tmp_path: Path):
     key = secrets.token_bytes(32)
     (tmp_path / "local.key").write_bytes(key)
     write_enc(tmp_path, key)
+    (tmp_path / "noctivault.yaml").write_text(
+        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        encoding="utf-8",
+    )
 
     nv = Noctivault(NoctivaultSettings(source="local"))
     s = nv.load(local_store_path=str(tmp_path))
@@ -82,6 +98,10 @@ def test_key_resolution_default_home(tmp_path: Path, monkeypatch: pytest.MonkeyP
     cfg_dir.mkdir(parents=True)
     (cfg_dir / "local.key").write_bytes(key)
     write_enc(tmp_path, key)
+    (tmp_path / "noctivault.yaml").write_text(
+        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv("HOME", str(fake_home))
     nv = Noctivault(NoctivaultSettings(source="local"))
@@ -98,6 +118,10 @@ def test_wrong_key_raises(tmp_path: Path):
     wrong_path = tmp_path / "wrong.key"
     wrong_path.write_bytes(wrong)
     write_enc(tmp_path, key)
+    (tmp_path / "noctivault.yaml").write_text(
+        "secret-refs:\n- platform: google\n  gcp_project_id: p\n  cast: password\n  ref: x\n  version: 1\n",
+        encoding="utf-8",
+    )
 
     nv = Noctivault(
         NoctivaultSettings(

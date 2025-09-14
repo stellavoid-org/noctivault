@@ -24,13 +24,20 @@ def test_masks_in_to_dict_and_repr(tmp_path: Path):
           - name: pw
             value: "secret"
             version: 1
-        secret-refs:
-          - platform: google
-            gcp_project_id: p
-            cast: password
-            ref: pw
-            version: 1
         """,
+    )
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
+            secret-refs:
+              - platform: google
+                gcp_project_id: p
+                cast: password
+                ref: pw
+                version: 1
+            """
+        ),
+        encoding="utf-8",
     )
     nv = Noctivault(NoctivaultSettings(source="local"))
     secrets = nv.load(local_store_path=str(tmp_path))
@@ -50,13 +57,20 @@ def test_missing_local_mock_raises(tmp_path: Path):
         platform: google
         gcp_project_id: p
         secret-mocks: []
-        secret-refs:
-          - platform: google
-            gcp_project_id: p
-            cast: sample
-            ref: missing
-            version: 1
         """,
+    )
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
+            secret-refs:
+              - platform: google
+                gcp_project_id: p
+                cast: sample
+                ref: missing
+                version: 1
+            """
+        ),
+        encoding="utf-8",
     )
     nv = Noctivault(NoctivaultSettings(source="local"))
     with pytest.raises(MissingLocalMockError):

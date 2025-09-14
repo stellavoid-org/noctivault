@@ -16,6 +16,7 @@ def write_yaml(tmp_path: Path, text: str) -> Path:
 def test_client_load_and_get_and_display_hash(tmp_path: Path):
     from noctivault.client import Noctivault, NoctivaultSettings
 
+    # mocks
     write_yaml(
         tmp_path,
         """
@@ -28,22 +29,30 @@ def test_client_load_and_get_and_display_hash(tmp_path: Path):
           - name: port
             value: "5432"
             version: 1
-        secret-refs:
-          - platform: google
-            gcp_project_id: p
-            cast: password
-            ref: x
-            version: 1
-            type: str
-          - key: database
-            children:
+        """,
+    )
+    # refs
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
+            secret-refs:
               - platform: google
                 gcp_project_id: p
-                cast: port
-                ref: port
+                cast: password
+                ref: x
                 version: 1
-                type: int
-        """,
+                type: str
+              - key: database
+                children:
+                  - platform: google
+                    gcp_project_id: p
+                    cast: port
+                    ref: port
+                    version: 1
+                    type: int
+            """
+        ),
+        encoding="utf-8",
     )
 
     nv = Noctivault(NoctivaultSettings(source="local"))
@@ -71,9 +80,10 @@ def test_client_get_missing_key_raises(tmp_path: Path):
         platform: google
         gcp_project_id: p
         secret-mocks: []
-        secret-refs: []
         """,
     )
+    # empty refs file
+    (tmp_path / "noctivault.yaml").write_text("secret-refs: []\n", encoding="utf-8")
     nv = Noctivault(NoctivaultSettings(source="local"))
     nv.load(local_store_path=str(tmp_path))
     with pytest.raises(KeyError):

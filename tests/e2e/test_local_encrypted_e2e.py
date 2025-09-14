@@ -16,7 +16,7 @@ def test_load_from_encrypted_local_store_keyfile(tmp_path: Path):
     key_path = tmp_path / "local.key"
     key_path.write_bytes(key)
 
-    # plaintext YAML
+    # plaintext mocks YAML (no refs)
     yaml_text = textwrap.dedent(
         """
         platform: google
@@ -28,27 +28,36 @@ def test_load_from_encrypted_local_store_keyfile(tmp_path: Path):
           - name: port
             value: "5432"
             version: 1
-        secret-refs:
-          - platform: google
-            gcp_project_id: p
-            cast: password
-            ref: x
-            version: 1
-            type: str
-          - key: database
-            children:
-              - platform: google
-                gcp_project_id: p
-                cast: port
-                ref: port
-                version: 1
-                type: int
         """
     ).encode("utf-8")
 
     # seal and write .enc
     enc_bytes = seal_with_key(yaml_text, key)
     (tmp_path / "noctivault.local-store.yaml.enc").write_bytes(enc_bytes)
+
+    # write refs file
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
+            secret-refs:
+              - platform: google
+                gcp_project_id: p
+                cast: password
+                ref: x
+                version: 1
+                type: str
+              - key: database
+                children:
+                  - platform: google
+                    gcp_project_id: p
+                    cast: port
+                    ref: port
+                    version: 1
+                    type: int
+            """
+        ),
+        encoding="utf-8",
+    )
 
     # load via client
     settings = NoctivaultSettings(source="local")

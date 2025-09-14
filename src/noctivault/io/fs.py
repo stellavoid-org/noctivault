@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 DEFAULT_LOCAL_STORE_FILENAME = "noctivault.local-store.yaml"
+DEFAULT_REFERENCE_FILENAME = "noctivault.yaml"
 DEFAULT_LOCAL_STORE_ENC_FILENAME = "noctivault.local-store.yaml.enc"
 
 
@@ -45,4 +46,22 @@ def resolve_local_store_source(base: str) -> tuple[str, str]:
         if p.name == DEFAULT_LOCAL_STORE_FILENAME:
             return ("yaml", str(p))
         raise FileNotFoundError(f"Unsupported file name: {p.name}")
+    raise FileNotFoundError(f"{p} not found")
+
+
+def resolve_reference_path(base: str) -> str:
+    """Resolve to the reference file path (plaintext only).
+
+    - If `base` is a directory, returns `<dir>/noctivault.yaml` if it exists.
+    - If `base` is a file, returns it if it exists.
+    - Otherwise, raises FileNotFoundError.
+    """
+    p = Path(base)
+    if p.is_dir():
+        candidate = p / DEFAULT_REFERENCE_FILENAME
+        if candidate.exists():
+            return str(candidate)
+        raise FileNotFoundError(f"{candidate} not found")
+    if p.is_file():
+        return str(p)
     raise FileNotFoundError(f"{p} not found")

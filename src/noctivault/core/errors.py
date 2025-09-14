@@ -24,3 +24,7 @@ class MissingKeyMaterialError(FileNotFoundError):
 
 class MissingDependencyError(RuntimeError):
     pass
+
+
+class CombinedConfigNotAllowedError(ValueError):
+    pass

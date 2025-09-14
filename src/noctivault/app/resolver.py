@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from noctivault.core.errors import DuplicatePathError
 from noctivault.core.value import SecretValue
 from noctivault.provider.local_mocks import LocalMocksProvider
-from noctivault.schema.models import SecretGroup, SecretRef, TopLevelConfig
+from noctivault.schema.models import SecretGroup, SecretRef
 from noctivault.tree.node import SecretNode
 
 
@@ -13,19 +13,18 @@ class SecretResolver:
     def __init__(self, provider: LocalMocksProvider):
         self.provider = provider
 
-    def resolve(self, cfg: TopLevelConfig) -> SecretNode:
-        refs: List[tuple[list[str], SecretRef]] = []
-        if cfg.secret_refs:
-            for entry in cfg.secret_refs:
-                if isinstance(entry, SecretGroup):
-                    for child in entry.children:
-                        refs.append(([entry.key, child.cast], child))
-                else:
-                    assert isinstance(entry, SecretRef)
-                    refs.append(([entry.cast], entry))
+    def resolve(self, refs_config: List[SecretRef | SecretGroup]) -> SecretNode:
+        refs_flat: List[tuple[list[str], SecretRef]] = []
+        for entry in refs_config:
+            if isinstance(entry, SecretGroup):
+                for child in entry.children:
+                    refs_flat.append(([entry.key, child.cast], child))
+            else:
+                assert isinstance(entry, SecretRef)
+                refs_flat.append(([entry.cast], entry))
 
         out: Dict[str, Any] = {}
-        for path_parts, ref in refs:
+        for path_parts, ref in refs_flat:
             # fetch raw
             raw = self.provider.fetch(ref.platform, ref.gcp_project_id, ref.ref, ref.version)
             # cast according to type (validate now), but store SecretValue to preserve raw

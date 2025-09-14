@@ -6,9 +6,9 @@ pytestmark = pytest.mark.integration
 def test_resolver_resolves_refs_and_builds_tree_with_casts():
     from noctivault.app.resolver import SecretResolver
     from noctivault.provider.local_mocks import LocalMocksProvider
-    from noctivault.schema.models import TopLevelConfig
+    from noctivault.schema.models import ReferenceConfig, TopLevelConfig
 
-    cfg = TopLevelConfig.model_validate(
+    mocks = TopLevelConfig.model_validate(
         {
             "platform": "google",
             "gcp_project_id": "p",
@@ -16,6 +16,10 @@ def test_resolver_resolves_refs_and_builds_tree_with_casts():
                 {"name": "db-pass", "value": "00123", "version": 1},
                 {"name": "port", "value": "5432", "version": 1},
             ],
+        }
+    )
+    refs = ReferenceConfig.model_validate(
+        {
             "secret-refs": [
                 {
                     "platform": "google",
@@ -38,13 +42,13 @@ def test_resolver_resolves_refs_and_builds_tree_with_casts():
                         }
                     ],
                 },
-            ],
+            ]
         }
     )
 
-    provider = LocalMocksProvider.from_config(cfg)
+    provider = LocalMocksProvider.from_config(mocks)
     resolver = SecretResolver(provider)
-    node = resolver.resolve(cfg)
+    node = resolver.resolve(refs.secret_refs)
 
     # attribute access
     assert str(node.password) == "***"  # masked repr
@@ -59,9 +63,9 @@ def test_resolver_duplicate_path_raises():
     from noctivault.app.resolver import SecretResolver
     from noctivault.core.errors import DuplicatePathError
     from noctivault.provider.local_mocks import LocalMocksProvider
-    from noctivault.schema.models import TopLevelConfig
+    from noctivault.schema.models import ReferenceConfig, TopLevelConfig
 
-    cfg = TopLevelConfig.model_validate(
+    mocks = TopLevelConfig.model_validate(
         {
             "platform": "google",
             "gcp_project_id": "p",
@@ -69,6 +73,10 @@ def test_resolver_duplicate_path_raises():
                 {"name": "x", "value": "1", "version": 1},
                 {"name": "y", "value": "2", "version": 1},
             ],
+        }
+    )
+    refs = ReferenceConfig.model_validate(
+        {
             "secret-refs": [
                 {
                     "platform": "google",
@@ -84,28 +92,32 @@ def test_resolver_duplicate_path_raises():
                     "ref": "y",
                     "version": 1,
                 },
-            ],
+            ]
         }
     )
-    provider = LocalMocksProvider.from_config(cfg)
+    provider = LocalMocksProvider.from_config(mocks)
     resolver = SecretResolver(provider)
     with pytest.raises(DuplicatePathError):
-        resolver.resolve(cfg)
+        resolver.resolve(refs.secret_refs)
 
 
 def test_resolver_type_cast_error():
     from noctivault.app.resolver import SecretResolver
     from noctivault.core.errors import TypeCastError
     from noctivault.provider.local_mocks import LocalMocksProvider
-    from noctivault.schema.models import TopLevelConfig
+    from noctivault.schema.models import ReferenceConfig, TopLevelConfig
 
-    cfg = TopLevelConfig.model_validate(
+    mocks = TopLevelConfig.model_validate(
         {
             "platform": "google",
             "gcp_project_id": "p",
             "secret-mocks": [
                 {"name": "n", "value": "not-int", "version": 1},
             ],
+        }
+    )
+    refs = ReferenceConfig.model_validate(
+        {
             "secret-refs": [
                 {
                     "platform": "google",
@@ -115,10 +127,10 @@ def test_resolver_type_cast_error():
                     "version": 1,
                     "type": "int",
                 },
-            ],
+            ]
         }
     )
-    provider = LocalMocksProvider.from_config(cfg)
+    provider = LocalMocksProvider.from_config(mocks)
     resolver = SecretResolver(provider)
     with pytest.raises(TypeCastError):
-        resolver.resolve(cfg)
+        resolver.resolve(refs.secret_refs)

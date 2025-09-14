@@ -18,16 +18,25 @@ def test_load_from_encrypted_local_store_passphrase(tmp_path: Path):
           - name: x
             value: "00123"
             version: 1
-        secret-refs:
-          - platform: google
-            gcp_project_id: p
-            cast: password
-            ref: x
-            version: 1
         """
     ).encode("utf-8")
 
     (tmp_path / "noctivault.local-store.yaml.enc").write_bytes(seal_with_passphrase(yml, "s3cret"))
+
+    # refs
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
+            secret-refs:
+              - platform: google
+                gcp_project_id: p
+                cast: password
+                ref: x
+                version: 1
+            """
+        ),
+        encoding="utf-8",
+    )
 
     settings = NoctivaultSettings(source="local", local_enc=LocalEncSettings(mode="passphrase"))
     nv = Noctivault(settings)

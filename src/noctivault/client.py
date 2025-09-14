@@ -12,12 +12,12 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from noctivault.tree.node import SecretNode
 
 from noctivault.app.resolver import SecretResolver
-from noctivault.core.errors import MissingKeyMaterialError
+from noctivault.core.errors import CombinedConfigNotAllowedError, MissingKeyMaterialError
 from noctivault.io.enc import unseal_with_key, unseal_with_passphrase
-from noctivault.io.fs import resolve_local_store_source
+from noctivault.io.fs import resolve_local_store_source, resolve_reference_path
 from noctivault.io.yaml import read_yaml, read_yaml_text
 from noctivault.provider.local_mocks import LocalMocksProvider
-from noctivault.schema.models import TopLevelConfig
+from noctivault.schema.models import ReferenceConfig, TopLevelConfig
 
 
 class LocalEncSettings(BaseModel):
@@ -38,10 +38,14 @@ class Noctivault:
     _raw_index: dict[str, str] | None = None  # path -> raw string for display_hash
     _type_index: dict[str, str] | None = None  # path -> type ("str"|"int")
 
-    def load(self, local_store_path: str = "../") -> "SecretNode":
+    def load(
+        self, local_store_path: str = "../", reference_path: Optional[str] = None
+    ) -> "SecretNode":
         if self.settings.source != "local":
             raise NotImplementedError("remote source not implemented")
         kind, path = resolve_local_store_source(local_store_path)
+        # resolve reference file alongside mocks unless explicitly specified
+        ref_path = reference_path or resolve_reference_path(Path(path).parent.as_posix())
         if kind == "yaml":
             data = read_yaml(path)
         else:
@@ -55,11 +59,18 @@ class Noctivault:
                 key = self._load_local_key(Path(path).parent)
                 plain = unseal_with_key(enc_bytes, key)
             data = read_yaml_text(plain.decode("utf-8"))
+        if data.get("secret-refs"):
+            raise CombinedConfigNotAllowedError("mocks file must not contain secret-refs")
         cfg = TopLevelConfig.model_validate(data)
+
+        refs_data = read_yaml(ref_path)
+        if refs_data.get("secret-mocks"):
+            raise CombinedConfigNotAllowedError("reference file must not contain secret-mocks")
+        refs_cfg = ReferenceConfig.model_validate(refs_data)
 
         provider = LocalMocksProvider.from_config(cfg)
         resolver = SecretResolver(provider)
-        node = resolver.resolve(cfg)
+        node = resolver.resolve(refs_cfg.secret_refs)
 
         # also build indices for get/display_hash
         raw_index: dict[str, str] = {}

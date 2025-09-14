@@ -11,7 +11,7 @@ def test_enc_precedence_over_plain_yaml(tmp_path: Path):
     from noctivault.client import Noctivault, NoctivaultSettings
     from noctivault.io.enc import seal_with_key
 
-    # write plain yaml with different value
+    # write plain mocks yaml with different value
     (tmp_path / "noctivault.local-store.yaml").write_text(
         textwrap.dedent(
             """
@@ -21,6 +21,14 @@ def test_enc_precedence_over_plain_yaml(tmp_path: Path):
               - name: x
                 value: "plain"
                 version: 1
+            """
+        ),
+        encoding="utf-8",
+    )
+    # refs file
+    (tmp_path / "noctivault.yaml").write_text(
+        textwrap.dedent(
+            """
             secret-refs:
               - platform: google
                 gcp_project_id: p
@@ -42,12 +50,6 @@ def test_enc_precedence_over_plain_yaml(tmp_path: Path):
         secret-mocks:
           - name: x
             value: "enc"
-            version: 1
-        secret-refs:
-          - platform: google
-            gcp_project_id: p
-            cast: password
-            ref: x
             version: 1
         """
     ).encode("utf-8")

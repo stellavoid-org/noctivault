@@ -15,7 +15,6 @@ def test_top_level_requires_platform_and_project(models_module=None):
             "platform": "google",
             "gcp_project_id": "my-proj",
             "secret-mocks": [],
-            "secret-refs": [],
         }
     )
     assert cfg.platform == "google"
@@ -50,13 +49,11 @@ def test_secret_mocks_inherit_top_level_platform_and_project():
     assert m1.effective_project == "q"
 
 
-def test_secret_refs_type_validation_and_default():
-    from noctivault.schema.models import TopLevelConfig
+def test_reference_config_validation_and_defaults():
+    from noctivault.schema.models import ReferenceConfig
 
-    cfg = TopLevelConfig.model_validate(
+    cfg = ReferenceConfig.model_validate(
         {
-            "platform": "google",
-            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -73,7 +70,7 @@ def test_secret_refs_type_validation_and_default():
                     "version": 3,
                     "type": "int",
                 },
-            ],
+            ]
         }
     )
     r0 = cfg.secret_refs[0]
@@ -82,10 +79,8 @@ def test_secret_refs_type_validation_and_default():
     assert r1.type == "int"
 
     with pytest.raises(ValidationError):
-        TopLevelConfig.model_validate(
+        ReferenceConfig.model_validate(
             {
-                "platform": "google",
-                "gcp_project_id": "p",
                 "secret-refs": [
                     {
                         "platform": "google",
@@ -94,7 +89,7 @@ def test_secret_refs_type_validation_and_default():
                         "ref": "r3",
                         "type": "float",
                     }
-                ],
+                ]
             }
         )
 
@@ -125,12 +120,10 @@ def test_secret_mocks_version_must_be_int_and_required():
 
 
 def test_secret_refs_version_int_or_latest():
-    from noctivault.schema.models import TopLevelConfig
+    from noctivault.schema.models import ReferenceConfig
 
-    cfg = TopLevelConfig.model_validate(
+    cfg = ReferenceConfig.model_validate(
         {
-            "platform": "google",
-            "gcp_project_id": "p",
             "secret-refs": [
                 {
                     "platform": "google",
@@ -152,7 +145,22 @@ def test_secret_refs_version_int_or_latest():
                     "cast": "z",
                     "ref": "r3",
                 },  # default latest
-            ],
+            ]
         }
     )
     assert [e.version for e in cfg.secret_refs] == [1, "latest", "latest"]
+
+
+def test_combined_config_is_rejected():
+    from noctivault.schema.models import TopLevelConfig
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        TopLevelConfig.model_validate(
+            {
+                "platform": "google",
+                "gcp_project_id": "p",
+                "secret-mocks": [],
+                "secret-refs": [],
+            }
+        )

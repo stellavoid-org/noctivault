@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
+from noctivault.core.errors import CombinedConfigNotAllowedError
 from pydantic import BaseModel, Field, model_validator
 
 AllowedType = Literal["str", "int"]
@@ -63,6 +64,7 @@ class TopLevelConfig(BaseModel):
     platform: str
     gcp_project_id: str
     secret_mocks: list[SecretMock] = Field(default_factory=list, alias="secret-mocks")
+    # secret-refs は TopLevelConfig では受け付けない（分離仕様）
     secret_refs: list[SecretRef | SecretGroup] | None = Field(default=None, alias="secret-refs")
 
     model_config = {
@@ -72,6 +74,11 @@ class TopLevelConfig(BaseModel):
 
     @model_validator(mode="after")
     def _apply_inheritance(self) -> "TopLevelConfig":
+        # 同一ファイル構成を禁止
+        if self.secret_refs is not None:
+            raise CombinedConfigNotAllowedError(
+                "TopLevelConfig must not contain secret-refs; use ReferenceConfig in noctivault.yaml"
+            )
         # Fill effective platform/project on mocks where not specified
         for m in self.secret_mocks:
             eff_plat = m.platform or self.platform
@@ -80,9 +87,13 @@ class TopLevelConfig(BaseModel):
             object.__setattr__(m, "_effective_platform", eff_plat)
             object.__setattr__(m, "_effective_project", eff_proj)
 
-        # Validate ref types
-        if self.secret_refs is not None:
-            # Flatten groups are validated structurally by pydantic already
-            pass
-
         return self
+
+
+class ReferenceConfig(BaseModel):
+    secret_refs: list[SecretRef | SecretGroup] = Field(alias="secret-refs")
+
+    model_config = {
+        "populate_by_name": True,
+        "extra": "ignore",
+    }
