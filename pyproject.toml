@@ -1,0 +1,85 @@
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "noctivault"
+version = "0.1.0"  # Gitタグ連携したいなら plugin を使う（後述）
+description = "Secure secret handler with cloud platform"
+readme = "README.md"
+license = "MIT"
+authors = ["ricky-rehivo <readme1.txt@gmail.com>"]
+keywords = ["secret", "secret-manager", "vault", "security"]
+
+packages = [{ include = "noctivault", from = "src" }]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Security :: Cryptography",
+  "Typing :: Typed"
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+pydantic = ">=2.6.0"
+pyyaml = "^6.0.2"
+
+[tool.poetry.extras]
+gcp = ["google-cloud-secret-manager"]
+# aws = ["boto3"]
+# azure = ["azure-identity", "azure-keyvault-secrets"]
+
+[tool.poetry.urls]
+Repository = "https://github.com/stellavoid-org/noctivault"
+Issues = "https://github.com/stellavoid-org/noctivault/issues"
+Changelog = "https://github.com/stellavoid-org/noctivault/releases"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+style = "semver"        # v1.2.3 みたいな SemVer を期待する場合
+vcs = "git"
+dirty = true            # ワークツリーが dirty のとき +dirty を付ける
+
+# CLI があるなら
+# [tool.poetry.scripts]
+# noctivault = "noctivault.cli:main"
+
+# --- 開発系（Poetry の group.dev を使う） ---
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-cov = "^6.0"
+freezegun = "^1.5.0"
+ruff = "^0.5.0"
+mypy = "^1.10.0"
+
+# pytest 設定（そのまま流用）
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--ignore=tests/deprecated -ra"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests"
+]
+
+# Lint/TypeCheck（任意）
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-select = ["I"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+mypy_path = "src"

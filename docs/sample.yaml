@@ -1,0 +1,11 @@
+platform: google # global
+gcp_project_id: my-proj # global
+secrets:
+  - cast: my-db-password
+    ref: db_password
+    version: latest
+  - cast: payment-api_key
+    platform: google # optional, overrides global
+    gcp_project_id: payments-proj # optional, overrides global
+    ref: payments_api_key
+    version: 5
