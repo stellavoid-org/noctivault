@@ -65,7 +65,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--ignore=tests/deprecated -ra"
+addopts = "--ignore=tests/deprecated -ra --cov=src/noctivault --cov-report=term-missing --cov-fail-under=85"
 markers = [
     "unit: Unit tests",
     "integration: Integration tests",

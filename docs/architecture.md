@@ -109,3 +109,11 @@ noctivault/
 
 - Provider を差し替えるだけで Resolver/Tree は再利用可能な設計とする。
 - 認証/タイムアウト/リトライは RemoteProvider 配下に閉じ込め、API からは透過化。
+
+## Concurrency & Retry (Remote, Future)
+
+- Provider API に sync/async を用意（`fetch`/`afetch`）。Resolver は Provider を並列呼び出しするだけ。
+- 並列制御: 最大同時取得数（セマフォ; 例: 5–10）と任意のレート制御（トークンバケット）。
+- リトライ: 429/503/DeadlineExceeded/接続断は指数バックオフ＋ジッタ（`Retry-After` 優先）。認可/404 等は即時失敗。
+- 設定例（remote 限定）: `max_concurrency`, `max_requests_per_sec`, `retry.{max_attempts, initial_backoff_s, max_backoff_s, jitter, per_request_timeout_s}`, `respect_retry_after`。
+- singleflight: 同一 `(platform, project, ref, version)` の同時要求は 1 回に集約し全待ちに共有。

@@ -12,7 +12,7 @@ pip install noctivault  # package name TBD
 
 ```python
 from noctivault import NoctivaultSettings
-import noctivault
+import noctivault  # provides factory `noctivault()` at top-level
 
 nv = noctivault.noctivault(settings=NoctivaultSettings(source="local"))
 secrets = nv.load(local_store_path="../")  # dir -> looks for noctivault.local-store.yaml
