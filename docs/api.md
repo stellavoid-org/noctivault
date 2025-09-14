@@ -16,7 +16,7 @@ Noctivault は、クラウドの Secret Manager から **環境変数を経由�
 
 * `source: "local"` — ローカル YAML (`noctivault.local-store.yaml`) からロード。
 * `local encrypted` — 暗号化 YAML（`noctivault.local-store.yaml.enc`）を優先してロードし、内部で復号後に既存フローで解決。
-* `source: "remote"` — GCP Secret Manager（ADC のみ）から取得。AWS/Azure は未サポート。
+* `source: "remote"` — GCP Secret Manager（ADC のみ、gRPC）から取得。AWS/Azure は未サポート。
 
 値は `pydantic.SecretStr` などにキャストされ、`repr/str` は `***` にマスクされます。
 
@@ -245,7 +245,10 @@ source==local の場合の解決フローを明文化します。
 
 source==remote（GCP）の場合は、各 `ref` を GCP Secret Manager に問い合わせて取得します（ADC のみ）。
   - 認証: ADC のみ（`GOOGLE_APPLICATION_CREDENTIALS`、あるいは GCE/GKE/GHA の Workload Identity）
-  - タイムアウトやリトライ設定は SDK 既定を使用（外部化しない）
+  - リトライはプロバイダ内部で最小限実装（設定不要）
+    - 404: 短い1回（0.2s）
+    - 5xx: 短い指数バックオフで最大3回（0.2s, 0.4s, 0.8s）
+    - 429(ResourceExhausted): RetryInfo（gRPC）を優先。なければ 1.0s, 2.0s, 4.0s（最大3回）
   - デコード: 取得したバイト列は UTF-8 にデコード。失敗時は `RemoteDecodeError`。
   - エラーマッピング: NotFound→`MissingRemoteSecretError`、PermissionDenied/Unauthenticated→`AuthorizationError`、InvalidArgument→`RemoteArgumentError`、DeadlineExceeded/ServiceUnavailable→`RemoteUnavailableError`、その他→`DecryptError`。
 

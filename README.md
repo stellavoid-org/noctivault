@@ -111,7 +111,10 @@ print(secrets.database.port.get())     # -> "5432"
 
 - Remote は mocks（`noctivault.local-store.yaml(.enc)`）を完全に無視します（refs のみ使用）。
 - プラットフォームは現状 Google のみサポート（`platform: google`）。
-- SDK のリトライ/タイムアウトは既定値を使用します。
+- リトライ方針（内部実装、設定不要）:
+  - 404: 短い1回リトライ（0.2s）
+  - 5xx: 短い指数バックオフで最大3回（0.2s, 0.4s, 0.8s）
+  - 429(ResourceExhausted): RetryInfo があれば尊重、なければ 1.0s, 2.0s, 4.0s（最大3回）
 
 ## CLI
 
