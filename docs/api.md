@@ -1,7 +1,7 @@
 # Noctivault — API Reference (Draft)
 
 > Version: 0.1.0 (MVP)
-> Status: Draft — **`settings` と `client` を分離**。`source` は `local` を実装、`remote` は予約。暗号化ローカルストア（`.yaml.enc`）を実装済み。
+> Status: Draft — **`settings` と `client` を分離**。`source` は `local` と `remote(GCP)` を実装。暗号化ローカルストア（`.yaml.enc`）を実装済み。
 
 ---
 
@@ -16,7 +16,7 @@ Noctivault は、クラウドの Secret Manager から **環境変数を経由�
 
 * `source: "local"` — ローカル YAML (`noctivault.local-store.yaml`) からロード。
 * `local encrypted` — 暗号化 YAML（`noctivault.local-store.yaml.enc`）を優先してロードし、内部で復号後に既存フローで解決。
-* `source: "remote"` — Secret Manager バックエンド（GCP/AWS/Azure）用。*v0.2.0では未実装*。
+* `source: "remote"` — GCP Secret Manager（ADC のみ）から取得。AWS/Azure は未サポート。
 
 値は `pydantic.SecretStr` などにキャストされ、`repr/str` は `***` にマスクされます。
 
@@ -78,8 +78,8 @@ real = secrets.database.password.get()    # 明示的に実値を取得
 
 ### Source
 
-* `local`: カレントディレクトリの `noctivault.local-store.yaml` を読み込み。
-* `remote`: 将来的に GCP/AWS/Azure の Secret Manager から取得（未実装）。
+* `local`: カレントディレクトリの `noctivault.local-store.yaml` を読み込み（`.yaml.enc` を優先）。
+* `remote`: `noctivault.yaml` の参照定義を読み込み、GCP Secret Manager から取得（ADC のみ）。
 
 ### Secret Tree
 
@@ -243,7 +243,11 @@ source==local の場合の解決フローを明文化します。
 - 得られた値を `SecretStr` に包み、`key/children` と `cast` で決まる最終パスに配置する。
   - 同じ最終パスに複数の定義が到達した場合は `DuplicatePathError`。
 
-source==remote の場合は、各 `ref` をクラウド Secret Manager に問い合わせて取得する（未来実装）。
+source==remote（GCP）の場合は、各 `ref` を GCP Secret Manager に問い合わせて取得します（ADC のみ）。
+  - 認証: ADC のみ（`GOOGLE_APPLICATION_CREDENTIALS`、あるいは GCE/GKE/GHA の Workload Identity）
+  - タイムアウトやリトライ設定は SDK 既定を使用（外部化しない）
+  - デコード: 取得したバイト列は UTF-8 にデコード。失敗時は `RemoteDecodeError`。
+  - エラーマッピング: NotFound→`MissingRemoteSecretError`、PermissionDenied/Unauthenticated→`AuthorizationError`、InvalidArgument→`RemoteArgumentError`、DeadlineExceeded/ServiceUnavailable→`RemoteUnavailableError`、その他→`DecryptError`。
 
 ---
 
@@ -263,7 +267,19 @@ NoctivaultSettings(
 
 * `source`: 使用するソースを指定。
 
-> `remote` 用のフィールド（例: 認証/タイムアウト/キャッシュ設定など）は将来追加します。クラウド別識別子は **宣言ファイル側**（YAML/JSON/Dict の各エントリ）で指定します。
+> `remote` 用の詳細設定（認証パス、リトライ/タイムアウト等）は外部化しません。認証は ADC のみ。クラウド別識別子は **宣言ファイル側**のトップレベル/エントリで指定します。
+
+### Provider Abstraction
+
+`SecretResolver` は `SecretProviderProtocol`（`fetch(platform, project, name, version) -> str`）を受け取ります。local は `LocalMocksProvider`、remote は `GcpSecretManagerProvider` を利用します。
+
+### Errors（remote）
+
+* `MissingRemoteSecretError` — リモートに該当が無い
+* `AuthorizationError` — 認可/認証エラー
+* `RemoteArgumentError` — 無効な引数
+* `RemoteUnavailableError` — 一時的なサービス不可/期限超過
+* `RemoteDecodeError` — UTF-8 デコード失敗
 
 ---
 

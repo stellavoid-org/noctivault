@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Literal, Optional
 
 from noctivault.core.errors import CombinedConfigNotAllowedError
@@ -8,19 +9,23 @@ from pydantic import BaseModel, Field, model_validator
 AllowedType = Literal["str", "int"]
 
 
+class Platform(str, Enum):
+    GOOGLE = "google"
+
+
 class SecretMock(BaseModel):
-    platform: Optional[str] = None
+    platform: Optional[Platform] = None
     gcp_project_id: Optional[str] = None
     name: str
     value: Any
     version: int
 
     @property
-    def effective_platform(self) -> str:
+    def effective_platform(self) -> Platform:
         # Runtime-filled by TopLevelConfig validation context via inheritance.
         # TopLevelConfig requires platform, so the effective value is always str here.
         v = getattr(self, "_effective_platform", self.platform)
-        assert isinstance(v, str)
+        assert isinstance(v, Platform)
         return v
 
     @property
@@ -39,7 +44,7 @@ class SecretMock(BaseModel):
 
 
 class SecretRef(BaseModel):
-    platform: str
+    platform: Platform
     gcp_project_id: str
     cast: str  # leaf key name
     ref: str
@@ -52,6 +57,13 @@ class SecretRef(BaseModel):
             self.type = "str"
         return self
 
+    @model_validator(mode="after")
+    def _validate_platform(self) -> "SecretRef":
+        # Restrict current implementation to Google only
+        if self.platform != Platform.GOOGLE:
+            raise ValueError("unsupported platform")
+        return self
+
     # version has a concrete default; no after-validator needed
 
 
@@ -61,7 +73,7 @@ class SecretGroup(BaseModel):
 
 
 class TopLevelConfig(BaseModel):
-    platform: str
+    platform: Platform
     gcp_project_id: str
     secret_mocks: list[SecretMock] = Field(default_factory=list, alias="secret-mocks")
     # secret-refs は TopLevelConfig では受け付けない（分離仕様）
@@ -91,7 +103,7 @@ class TopLevelConfig(BaseModel):
 
 
 class ReferenceConfig(BaseModel):
-    platform: str
+    platform: Platform
     gcp_project_id: str
     secret_refs: list[SecretRef | SecretGroup] = Field(alias="secret-refs")
 
@@ -131,3 +143,10 @@ class ReferenceConfig(BaseModel):
                 new_refs.append(entry)
             data = {**data, "secret-refs": new_refs}
         return data
+
+    @model_validator(mode="after")
+    def _validate_platform(self) -> "ReferenceConfig":
+        if self.platform != Platform.GOOGLE:
+            raise ValueError("unsupported platform")
+        # Children SecretRef validator enforces per-entry as well.
+        return self

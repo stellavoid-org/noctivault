@@ -8,6 +8,8 @@ Noctivault は、クラウドの Secret Manager から環境変数を介さず�
 pip install noctivault                 # package name TBD
 # 暗号化ローカルストア（.yaml.enc）を使う場合は extras を追加
 pip install 'noctivault[local-enc]'
+# GCP Remote を使う場合
+pip install 'noctivault[gcp]'
 ```
 
 ## Quickstart（2ファイル構成）
@@ -65,6 +67,52 @@ YAML スキーマ（mocks/refs・解決フロー・入力制約など）の詳�
 
 - ドキュメント: docs/api.md
 
+## Quickstart（Remote / GCP）
+
+前提:
+
+- 依存のインストール: `pip install 'noctivault[gcp]'`
+- 認証: ADC（`GOOGLE_APPLICATION_CREDENTIALS`、または GCE/GKE/GitHub Actions の Workload Identity）
+
+1) Refs（平文）: `noctivault.yaml`
+
+```
+platform: google
+gcp_project_id: demo
+
+secret-refs:
+  - key: database
+    children:
+      - cast: password
+        ref: db-password
+        version: latest
+        type: str
+      - cast: port
+        ref: db-port
+        version: 1
+        type: int
+```
+
+2) ロード（Python）
+
+```python
+from noctivault import NoctivaultSettings
+import noctivault
+
+nv = noctivault.noctivault(settings=NoctivaultSettings(source="remote"))
+secrets = nv.load(local_store_path="./")  # ディレクトリに noctivault.yaml を置く
+
+print(secrets.database.password)       # -> ***
+print(secrets.database.password.get()) # -> 実値（GCPから取得）
+print(secrets.database.port.get())     # -> "5432"
+```
+
+注意:
+
+- Remote は mocks（`noctivault.local-store.yaml(.enc)`）を完全に無視します（refs のみ使用）。
+- プラットフォームは現状 Google のみサポート（`platform: google`）。
+- SDK のリトライ/タイムアウトは既定値を使用します。
+
 ## CLI
 
 `pyproject.toml` のエントリにより `noctivault` コマンドが利用できます。
@@ -103,7 +151,7 @@ local.key
 
 ## Status
 
-MVP / Draft。`source: local` のみ実装（remote は予約）。仕様は docs/api.md を正とします。
+MVP / Draft。`source: local` と `source: remote (GCP, ADCのみ)` を実装。仕様は docs/api.md を正とします。
 
 <!-- Dev helper commands intentionally omitted (no Makefile). -->
 

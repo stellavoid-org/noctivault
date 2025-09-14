@@ -4,9 +4,9 @@ from collections import defaultdict
 from typing import Dict, Tuple, Union
 
 from noctivault.core.errors import MissingLocalMockError
-from noctivault.schema.models import TopLevelConfig
+from noctivault.schema.models import Platform, TopLevelConfig
 
-Key = Tuple[str, str, str]  # (platform, project, name)
+Key = Tuple[Platform, str, str]  # (platform, project, name)
 
 
 class LocalMocksProvider:
@@ -23,7 +23,7 @@ class LocalMocksProvider:
             idx[key][m.version] = m.value
         return cls(index=dict(idx))
 
-    def fetch(self, platform: str, project: str, name: str, version: Union[int, str]) -> str:
+    def fetch(self, platform: Platform, project: str, name: str, version: Union[int, str]) -> str:
         key: Key = (platform, project, name)
         versions = self._index.get(key)
         if not versions:

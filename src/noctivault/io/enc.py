@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 try:
-    from argon2.low_level import Type as _Argon2Type
+    from argon2.low_level import Type as _Argon2Type  # type: ignore[import-not-found]
     from argon2.low_level import hash_secret_raw as _argon2_hash
 
     _ARGON2_AVAILABLE = True
@@ -71,7 +71,7 @@ def _kdf_argon2id(
         r = 8
         p = parallelism or 1
         return _kdf_scrypt(passphrase, salt, n=2**log_n, r=r, p=p)
-    return _argon2_hash(
+    out = _argon2_hash(
         secret=passphrase.encode("utf-8"),
         salt=salt,
         time_cost=time_cost,
@@ -80,6 +80,10 @@ def _kdf_argon2id(
         hash_len=32,
         type=_Argon2Type.ID,
     )
+    # _argon2_hash may not be typed; coerce to bytes for type-checker
+    from typing import cast as _cast
+
+    return _cast(bytes, out)
 
 
 def seal_with_passphrase(plaintext: bytes, passphrase: str) -> bytes:

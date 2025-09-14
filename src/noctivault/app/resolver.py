@@ -4,13 +4,13 @@ from typing import Any, Dict, List
 
 from noctivault.core.errors import DuplicatePathError
 from noctivault.core.value import SecretValue
-from noctivault.provider.local_mocks import LocalMocksProvider
+from noctivault.provider.protocol import SecretProviderProtocol
 from noctivault.schema.models import SecretGroup, SecretRef
 from noctivault.tree.node import SecretNode
 
 
 class SecretResolver:
-    def __init__(self, provider: LocalMocksProvider):
+    def __init__(self, provider: SecretProviderProtocol):
         self.provider = provider
 
     def resolve(self, refs_config: List[SecretRef | SecretGroup]) -> SecretNode:

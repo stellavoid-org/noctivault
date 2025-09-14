@@ -16,8 +16,9 @@ from noctivault.core.errors import CombinedConfigNotAllowedError, MissingKeyMate
 from noctivault.io.enc import unseal_with_key, unseal_with_passphrase
 from noctivault.io.fs import resolve_local_store_source, resolve_reference_path
 from noctivault.io.yaml import read_yaml, read_yaml_text
+from noctivault.provider.gcp import GcpSecretManagerProvider
 from noctivault.provider.local_mocks import LocalMocksProvider
-from noctivault.schema.models import ReferenceConfig, TopLevelConfig
+from noctivault.schema.models import Platform, ReferenceConfig, TopLevelConfig
 
 
 class LocalEncSettings(BaseModel):
@@ -41,8 +42,24 @@ class Noctivault:
     def load(
         self, local_store_path: str = "../", reference_path: Optional[str] = None
     ) -> "SecretNode":
-        if self.settings.source != "local":
-            raise NotImplementedError("remote source not implemented")
+        if self.settings.source == "remote":
+            # remote: only references are read; mocks are ignored entirely
+            ref_path = reference_path or resolve_reference_path(local_store_path)
+            refs_data = read_yaml(ref_path)
+            if refs_data.get("secret-mocks"):
+                raise CombinedConfigNotAllowedError("reference file must not contain secret-mocks")
+            refs_cfg = ReferenceConfig.model_validate(refs_data)
+            if refs_cfg.platform is not Platform.GOOGLE:
+                raise NotImplementedError("only GCP platform is supported for remote")
+            gcp_provider = GcpSecretManagerProvider()
+            resolver = SecretResolver(gcp_provider)
+            node_remote = resolver.resolve(refs_cfg.secret_refs)
+            raw_index, type_index = self._build_indices(node_remote)
+            self._secrets = node_remote
+            self._raw_index = raw_index
+            self._type_index = type_index
+            return node_remote
+        # local mode
         kind, path = resolve_local_store_source(local_store_path)
         # resolve reference file alongside mocks unless explicitly specified
         ref_path = reference_path or resolve_reference_path(Path(path).parent.as_posix())
@@ -68,37 +85,15 @@ class Noctivault:
             raise CombinedConfigNotAllowedError("reference file must not contain secret-mocks")
         refs_cfg = ReferenceConfig.model_validate(refs_data)
 
-        provider = LocalMocksProvider.from_config(cfg)
-        resolver = SecretResolver(provider)
-        node = resolver.resolve(refs_cfg.secret_refs)
+        local_provider = LocalMocksProvider.from_config(cfg)
+        resolver = SecretResolver(local_provider)
+        node_local = resolver.resolve(refs_cfg.secret_refs)
 
-        # also build indices for get/display_hash
-        raw_index: dict[str, str] = {}
-        type_index: dict[str, str] = {}
-
-        def walk(prefix: list[str], obj: Any) -> None:
-            from noctivault.core.value import SecretValue
-            from noctivault.tree.node import SecretNode
-
-            if isinstance(obj, SecretNode):
-                # traverse internal mapping via typed accessor
-                for k, v in obj._as_mapping().items():
-                    walk(prefix + [k], v)
-                return
-            if isinstance(obj, dict):
-                for k, v in obj.items():
-                    walk(prefix + [k], v)
-                return
-            if isinstance(obj, SecretValue):
-                path = ".".join(prefix)
-                raw_index[path] = obj.get()
-                type_index[path] = obj._type
-
-        walk([], node)
-        self._secrets = node
+        raw_index, type_index = self._build_indices(node_local)
+        self._secrets = node_local
         self._raw_index = raw_index
         self._type_index = type_index
-        return node
+        return node_local
 
     def _ensure_loaded(self) -> None:
         if self._secrets is None:
@@ -141,6 +136,31 @@ class Noctivault:
         if env:
             return env
         raise MissingKeyMaterialError("passphrase not provided")
+
+    def _build_indices(self, node: "SecretNode") -> tuple[dict[str, str], dict[str, str]]:
+        raw_index: dict[str, str] = {}
+        type_index: dict[str, str] = {}
+
+        def walk(prefix: list[str], obj: Any) -> None:
+            from noctivault.core.value import SecretValue
+            from noctivault.tree.node import SecretNode
+
+            if isinstance(obj, SecretNode):
+                # traverse internal mapping via typed accessor
+                for k, v in obj._as_mapping().items():
+                    walk(prefix + [k], v)
+                return
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    walk(prefix + [k], v)
+                return
+            if isinstance(obj, SecretValue):
+                path = ".".join(prefix)
+                raw_index[path] = obj.get()
+                type_index[path] = obj._type
+
+        walk([], node)
+        return raw_index, type_index
 
     def get(self, path: str) -> Any:
         self._ensure_loaded()
