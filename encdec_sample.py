@@ -32,13 +32,17 @@
 # print(plaintext.decode("utf-8"))
 
 
-import time, statistics, string, secrets
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes
-from cryptography.exceptions import UnsupportedAlgorithm
+import secrets
+import statistics
+import string
+import time
 
-from cryptography.hazmat.backends.openssl.backend import backend
 import cryptography
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.backends.openssl.backend import backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
 print("OpenSSL (used by cryptography):", backend.openssl_version_text())
 print("cryptography:", cryptography.__version__)
 
@@ -47,9 +51,11 @@ NUM_SAMPLES = 1000
 MSG_LEN = 100  # ASCII letters only
 KEY_SIZE = 2048  # 3072/4096にしてもOK（その分遅くなります）
 
+
 def rand_alpha_ascii(n: int) -> bytes:
     alphabet = string.ascii_letters  # A-Za-z
-    return ''.join(secrets.choice(alphabet) for _ in range(n)).encode('ascii')
+    return "".join(secrets.choice(alphabet) for _ in range(n)).encode("ascii")
+
 
 # 鍵ペア生成（計測対象外）
 private_key = rsa.generate_private_key(public_exponent=65537, key_size=KEY_SIZE)
@@ -60,6 +66,7 @@ algos = [
     ("SHA3-256", hashes.SHA3_256()),
 ]
 
+
 def bench_algo(name, alg):
     enc_times = []
     dec_times = []
@@ -68,23 +75,13 @@ def bench_algo(name, alg):
         try:
             t0 = time.perf_counter()
             ct = public_key.encrypt(
-                msg,
-                padding.OAEP(
-                    mgf=padding.MGF1(algorithm=alg),
-                    algorithm=alg,
-                    label=None
-                )
+                msg, padding.OAEP(mgf=padding.MGF1(algorithm=alg), algorithm=alg, label=None)
             )
             t1 = time.perf_counter()
 
             t2 = time.perf_counter()
             pt = private_key.decrypt(
-                ct,
-                padding.OAEP(
-                    mgf=padding.MGF1(algorithm=alg),
-                    algorithm=alg,
-                    label=None
-                )
+                ct, padding.OAEP(mgf=padding.MGF1(algorithm=alg), algorithm=alg, label=None)
             )
             t3 = time.perf_counter()
         except UnsupportedAlgorithm:
@@ -98,17 +95,28 @@ def bench_algo(name, alg):
 
     return {
         "unsupported": False,
-        "enc_min": min(enc_times), "enc_max": max(enc_times), "enc_avg": statistics.mean(enc_times),
-        "dec_min": min(dec_times), "dec_max": max(dec_times), "dec_avg": statistics.mean(dec_times),
+        "enc_min": min(enc_times),
+        "enc_max": max(enc_times),
+        "enc_avg": statistics.mean(enc_times),
+        "dec_min": min(dec_times),
+        "dec_max": max(dec_times),
+        "dec_avg": statistics.mean(dec_times),
     }
+
 
 print(f"Benchmark: RSA-OAEP on {MSG_LEN} ASCII chars, {NUM_SAMPLES} samples, RSA {KEY_SIZE}-bit")
 for name, alg in algos:
     res = bench_algo(name, alg)
     if res.get("unsupported"):
-        print(f"[{name}] SKIPPED: OAEP with {name} not supported by this OpenSSL/cryptography backend.")
+        print(
+            f"[{name}] SKIPPED: OAEP with {name} not supported by this OpenSSL/cryptography backend."
+        )
         continue
     fmt = lambda x: f"{x:,.3f} ms"
     print(f"[{name}]")
-    print(f"  encrypt: min {fmt(res['enc_min'])} | max {fmt(res['enc_max'])} | avg {fmt(res['enc_avg'])}")
-    print(f"  decrypt: min {fmt(res['dec_min'])} | max {fmt(res['dec_max'])} | avg {fmt(res['dec_avg'])}")
+    print(
+        f"  encrypt: min {fmt(res['enc_min'])} | max {fmt(res['enc_max'])} | avg {fmt(res['enc_avg'])}"
+    )
+    print(
+        f"  decrypt: min {fmt(res['dec_min'])} | max {fmt(res['dec_max'])} | avg {fmt(res['dec_avg'])}"
+    )

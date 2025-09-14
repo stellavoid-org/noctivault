@@ -11,3 +11,8 @@ def read_yaml(path: str) -> dict[str, Any]:
     text = p.read_text(encoding="utf-8")
     data = yaml.safe_load(text)
     return data or {}
+
+
+def read_yaml_text(text: str) -> dict[str, Any]:
+    data = yaml.safe_load(text)
+    return data or {}

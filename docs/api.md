@@ -1,7 +1,7 @@
 # Noctivault — API Reference (Draft)
 
 > Version: 0.1.0 (MVP)
-> Status: Draft — **`settings` と `client` を分離**。`source` は `local` を実装、`remote` は予約。暗号化ローカルストア（`.yaml.enc`）の仕様を追加（実装予定）。
+> Status: Draft — **`settings` と `client` を分離**。`source` は `local` を実装、`remote` は予約。暗号化ローカルストア（`.yaml.enc`）を実装済み。
 
 ---
 
@@ -15,7 +15,7 @@ Noctivault は、クラウドの Secret Manager から **環境変数を経由�
 サポート状態:
 
 * `source: "local"` — ローカル YAML (`noctivault.local-store.yaml`) からロード。
-* `local encrypted` — 暗号化 YAML（`noctivault.local-store.yaml.enc`）を優先してロードし、内部で復号後に既存フローで解決（本ドキュメントで仕様定義、実装予定）。
+* `local encrypted` — 暗号化 YAML（`noctivault.local-store.yaml.enc`）を優先してロードし、内部で復号後に既存フローで解決。
 * `source: "remote"` — Secret Manager バックエンド（GCP/AWS/Azure）用。*v0.2.0では未実装*。
 
 値は `pydantic.SecretStr` などにキャストされ、`repr/str` は `***` にマスクされます。
@@ -39,6 +39,7 @@ pip install noctivault  # (package name TBD)
 ```
 
 > Depends on `pydantic>=2`.
+> Encrypted local store: `pip install 'noctivault[local-enc]'`（`cryptography`, `argon2-cffi`）。
 
 ---
 
@@ -82,7 +83,7 @@ real = secrets.database.password.get()    # 明示的に実値を取得
 
 ### Secret Tree
 
-ロード結果は **ネスト木構造**。属性/キーで辿れ、葉は `SecretStr` にラップされる。`repr/str` はマスク、実値は `.get()` でのみ露出。
+ロード結果は **ネスト木構造**。属性/キーで辿れ、葉はマスク表示される秘密値（`SecretValue` 内部で `SecretStr` を保持）として表現される。`repr/str` は `***` にマスク、実値は `.get()` でのみ露出。
 
 ---
 
@@ -123,7 +124,7 @@ secret-mocks:                 # required, list of mock entries
 
 - 優先順位: `.yaml.enc` が存在すればそれを使用。無ければ従来の `.yaml` を使用。
 - 暗号方式: AES-256-GCM（AEAD）。改ざん時は復号失敗。
-- KDF（passphrase モード時）: Argon2id（salt/メモリ/時間/並列のパラメータをヘッダに格納）。
+- KDF（passphrase モード時）: Argon2id（必須）。パラメータ（time/memory/parallelism）をヘッダに格納。
 - 鍵配布: 2モード併用（key-file / passphrase）。デフォルトは key-file。
 - 依存パッケージ（extras）: `cryptography`, `argon2-cffi`（`pip install 'noctivault[local-enc]'`）。
 
@@ -133,9 +134,13 @@ secret-mocks:                 # required, list of mock entries
 - fields:
   - algo: `AES-256-GCM`
   - nonce: 12 bytes（ランダム）
-  - kdf: `argon2id`（passphrase の時のみ）+ salt, mem, time, parallel
   - ciphertext: UTF-8 の YAML 平文を暗号化した本体
   - tag: GCM 認証タグ
+  - passphrase モード時のヘッダ構成:
+    - `MAGIC` + `MODE (0x01)` + `KDF_ID` + `params` + `salt` + `nonce` + `ciphertext`
+    - `KDF_ID`: `0x01=argon2id`
+    - `params`（argon2id）: `time_cost(1) | parallelism(1) | memory_cost(4)`（big-endian）
+    - `salt`: `salt_len(1)` の直後に続く可変長
 - エンコード: バイナリ（将来的に ASCII armor をオプション追加可）。
 
 鍵の扱い
@@ -148,7 +153,7 @@ secret-mocks:                 # required, list of mock entries
   - 対話でパスフレーズを取得し、Argon2id で鍵導出。
   - ランタイムはフック/プロンプトでパスフレーズを受け取り復号。
 
-設定拡張（計画）
+設定（実装）
 
 ```python
 class NoctivaultSettings(BaseModel):
@@ -159,14 +164,16 @@ class NoctivaultSettings(BaseModel):
 class LocalEncSettings(BaseModel):
     mode: Literal["key-file", "passphrase"] = "key-file"
     key_file_path: str | None = None         # default: ~/.config/noctivault/local.key
-    key_provider: Callable[[], bytes] | None = None  # 直接鍵を供給する場合
-    passphrase_prompt: bool = False          # True のとき対話で問い合わせ
+    passphrase: str | None = None            # 実運用では secure input を推奨（テスト便宜用）
 ```
 
 解決フロー（`source==local` の場合）
 
 - パス解決時に `.yaml.enc` を優先探索。存在すれば復号して YAML テキストを得る。
 - 復号成功後は従来どおり `TopLevelConfig` で検証し、`SecretResolver` で解決。
+- 鍵/パスフレーズ解決の優先順位:
+  - Key file: `settings.local_enc.key_file_path` → `NOCTIVAULT_LOCAL_KEY_FILE` → 同ディレクトリの `local.key` → `~/.config/noctivault/local.key`
+  - Passphrase: `settings.local_enc.passphrase` → `NOCTIVAULT_LOCAL_PASSPHRASE`
 - エラー種別（例）:
   - `InvalidEncHeaderError`（ヘッダ不正）
   - `DecryptError`（鍵不一致/タグ検証失敗）
@@ -174,12 +181,13 @@ class LocalEncSettings(BaseModel):
 
 CLI（事前処理ツール、仕様）
 
-- `noctivault key gen [--out <path>]` — 256-bit 鍵を生成（600 権限）。
-- `noctivault local seal <path> [--mode key-file|passphrase] [--key-file <path>] [--force] [--rm-plain]`
-  - `<path>` がディレクトリの場合、直下の `noctivault.local-store.yaml` を読み、同じ場所に `noctivault.local-store.yaml.enc` を出力。
-  - `--rm-plain` 指定時は平文を削除（推奨: まずは VCS から除外しておく）。
-- `noctivault local unseal <path> [--stdout|--out <file>]` — 復号確認/デバッグ用。
-- `noctivault local verify <path>` — 復号検証のみを行い、終了コードで結果を返す。
+- `noctivault key gen [--out <path>]` — 256-bit 鍵を生成（権限600）。出力パス未指定時は `~/.config/noctivault/local.key`。
+- `noctivault local seal <dir|file> [--key-file <path> | --passphrase <pw> | --prompt] [--out <path>] [--rm-plain] [--force]`
+  - ディレクトリ指定時、直下の `noctivault.local-store.yaml` を入力として `noctivault.local-store.yaml.enc` を出力。
+  - `--rm-plain` 指定時は平文を削除（事前に VCS から除外しておくこと）。
+  - `--prompt` は passphrase の対話入力。
+- `noctivault local unseal <enc_file> [--key-file <path> | --passphrase <pw> | --prompt]` — 復号（標準出力へ）。
+- `noctivault local verify <enc_file> [--key-file <path> | --passphrase <pw> | --prompt]` — 復号検証のみ（終了コード/標準出力）。
 
 運用ガイドライン
 
@@ -191,7 +199,7 @@ CLI（事前処理ツール、仕様）
 
 ## File Format — Local/Remote Reference
 
-**Filename**: `noctivault.reference.yaml`
+**Location**: 同一ファイル（`noctivault.local-store.yaml`）内の `secret-refs` セクションに定義します。
 
 **Schema**
 
@@ -221,6 +229,7 @@ secret-refs:
 * Local/Remote で **同一スキーマ** を使用します。`source==local` でも `platform` と `gcp_project_id` は必須です（remote のモックとして解決するため）。
 * 当面は Google のみを対象とします（AWS/Azure フィールドは未サポート）。
 * `type` は各 leaf の型指定。許容値は `str` と `int` のみ。未指定は `str` として扱います。
+* 参考用の別ファイル（`noctivault.reference.yaml`）は将来の設計案であり、現行の実装では使用しません。
 
 ---
 
@@ -272,7 +281,7 @@ NoctivaultSettings(
 **Methods**
 
 * `load(local_store_path: str = "../") -> SecretNode`
-  シークレットをロードしてマスク付きツリーを返す。`source=="local"` の場合、`local_store_path` は load_dotenv("../") と同じ解釈で処理する（ディレクトリなら直下の `noctivault.local-store.yaml` を探索、ファイルならそのパスを使用）。該当ファイルが存在すればスキーマ検証を行ってから解決を実施する。
+  シークレットをロードしてマスク付きツリーを返す。`source=="local"` の場合、`local_store_path` は load_dotenv("../") と同じ解釈で処理する（ディレクトリなら直下の `noctivault.local-store.yaml.enc` を優先探索し、無ければ `noctivault.local-store.yaml` を使用。ファイルならそのパスを使用）。該当ファイルを読み（`.enc` は復号）、スキーマ検証を行ってから解決を実施する。
 
 * `get(path: str) -> Any` *(optional)*
   `"a.b.c"` のドットパスで即座に実値を取得（存在しない場合は `KeyError`）。返す値の型は `type` 指定に従う（既定は `str`）。
@@ -307,7 +316,7 @@ secrets.to_dict()                  # masked
 * `ValidationError`（または同等のスキーマ検証エラー）: `noctivault.local-store.yaml` の検証に失敗（例: `version` が整数でない、必須フィールド欠落）。
 * `TypeCastError`: `type` 指定に従った値のキャストに失敗（例: `type=int` で非数値）。
 * `DuplicatePathError`: `secret-refs` の解決結果が同じ最終パスに衝突した。
-* `FileNotFoundError`: `local_store_path` の解決結果として `noctivault.local-store.yaml` が見つからない。
+* `FileNotFoundError`: `local_store_path` の解決結果として `noctivault.local-store.yaml(.enc)` が見つからない。
 * `KeyError` / `AttributeError`: 存在しないパス参照。
 * `ValueError("Unknown source: ...")`: 未サポートの `source`。
 * `NotImplementedError`: `source==remote`（v0.1.0）。
@@ -343,41 +352,6 @@ secrets.to_dict()                  # masked
 - secret-mocks: `name`, `value`, `version` は必須。`platform` と `gcp_project_id` はエントリ未指定ならドキュメントのトップレベルから継承。両方とも不在の場合はスキーマエラー。
 - secret-refs: `platform`, `gcp_project_id`, `ref`, `cast`（または `key/children` 経由での `cast`）は必須。`version` 未指定は `latest` と同等に解決。`type` は `str` または `int` のみ（未指定は `str`）。
   refs の `platform`/`gcp_project_id` と、mocks の effective 値は一致していなければならない。`type=int` 指定時のキャスト失敗は `TypeCastError`。
-
----
-
-## Minimal Reference Implementation (Sketch)
-
-以下は概念スケッチです（正確なコードではありません）。
-
-```python
-# 1) settings
-class NoctivaultSettings(BaseModel):
-    source: Literal["local", "remote"] = "local"
-    local_store_path: str = "../"  # dir -> join('noctivault.local-store.yaml')
-
-# 2) loader outline
-class Noctivault:
-    def load(self) -> SecretNode:
-        if self.settings.source == "local":
-            cfg = read_yaml(resolve_path(self.settings.local_store_path))
-            refs = cfg.get("secret-refs", [])
-            mocks = cfg.get("secret-mocks", [])
-            # トップレベルのデフォルト (platform, gcp_project_id) を考慮してインデックス化
-            index = index_mocks_by_platform_project_ref_version(
-                mocks,
-                defaults=(cfg.get("platform"), cfg.get("gcp_project_id")),
-            )
-            out = {}
-            for ref in flatten_refs(refs):  # yields (platform, project, path_parts, ref_name, version)
-                version = resolve_version(index, ref, default_latest=True)
-                value = lookup_mock(index, ref.platform, ref.project, ref.ref_name, version)
-                if value is None:
-                    raise MissingLocalMockError(ref)
-                put_value(out, ref.path_parts, SecretStr(value), on_conflict_error=DuplicatePathError)
-            return SecretNode(out)
-        raise NotImplementedError("remote")
-```
 
 ---
 

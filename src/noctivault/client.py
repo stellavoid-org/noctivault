@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -10,14 +12,23 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from noctivault.tree.node import SecretNode
 
 from noctivault.app.resolver import SecretResolver
-from noctivault.io.fs import resolve_local_store_path
-from noctivault.io.yaml import read_yaml
+from noctivault.core.errors import MissingKeyMaterialError
+from noctivault.io.enc import unseal_with_key, unseal_with_passphrase
+from noctivault.io.fs import resolve_local_store_source
+from noctivault.io.yaml import read_yaml, read_yaml_text
 from noctivault.provider.local_mocks import LocalMocksProvider
 from noctivault.schema.models import TopLevelConfig
 
 
+class LocalEncSettings(BaseModel):
+    mode: Literal["key-file", "passphrase"] = "key-file"
+    key_file_path: Optional[str] = None
+    passphrase: Optional[str] = None  # tests convenience; prefer provider/secure input in real use
+
+
 class NoctivaultSettings(BaseModel):
     source: str = "local"
+    local_enc: Optional[LocalEncSettings] = None
 
 
 @dataclass
@@ -30,8 +41,20 @@ class Noctivault:
     def load(self, local_store_path: str = "../") -> "SecretNode":
         if self.settings.source != "local":
             raise NotImplementedError("remote source not implemented")
-        cfg_path = resolve_local_store_path(local_store_path)
-        data = read_yaml(cfg_path)
+        kind, path = resolve_local_store_source(local_store_path)
+        if kind == "yaml":
+            data = read_yaml(path)
+        else:
+            # enc: load key and decrypt
+            enc_bytes = Path(path).read_bytes()
+            # choose passphrase or key-file
+            if self._use_passphrase():
+                pw = self._load_local_passphrase()
+                plain = unseal_with_passphrase(enc_bytes, pw)
+            else:
+                key = self._load_local_key(Path(path).parent)
+                plain = unseal_with_key(enc_bytes, key)
+            data = read_yaml_text(plain.decode("utf-8"))
         cfg = TopLevelConfig.model_validate(data)
 
         provider = LocalMocksProvider.from_config(cfg)
@@ -69,6 +92,44 @@ class Noctivault:
     def _ensure_loaded(self) -> None:
         if self._secrets is None:
             raise RuntimeError("secrets not loaded; call load() first")
+
+    def _load_local_key(self, directory: Path) -> bytes:
+        # Priority: explicit in settings -> env -> local file -> default config path
+        # 1) settings
+        s = self.settings.local_enc
+        if s and s.key_file_path:
+            p = Path(s.key_file_path)
+            return p.read_bytes()
+        # 2) env var
+        env = os.getenv("NOCTIVAULT_LOCAL_KEY_FILE")
+        if env:
+            return Path(env).expanduser().read_bytes()
+        # 3) local file next to .enc
+        local = directory / "local.key"
+        if local.exists():
+            return local.read_bytes()
+        # 4) default config path
+        default = Path.home() / ".config" / "noctivault" / "local.key"
+        if default.exists():
+            return default.read_bytes()
+        raise MissingKeyMaterialError("local key file not found")
+
+    def _use_passphrase(self) -> bool:
+        s = self.settings.local_enc
+        if s and s.mode == "passphrase":
+            return True
+        if os.getenv("NOCTIVAULT_LOCAL_PASSPHRASE"):
+            return True
+        return False
+
+    def _load_local_passphrase(self) -> str:
+        s = self.settings.local_enc
+        if s and s.passphrase:
+            return s.passphrase
+        env = os.getenv("NOCTIVAULT_LOCAL_PASSPHRASE")
+        if env:
+            return env
+        raise MissingKeyMaterialError("passphrase not provided")
 
     def get(self, path: str) -> Any:
         self._ensure_loaded()

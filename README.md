@@ -28,9 +28,32 @@ YAML スキーマ（refs/mocks・解決フロー・入力制約など）の詳�
 
 - ドキュメント: docs/api.md
 
+## CLI
+
+`pyproject.toml` のエントリにより `noctivault` コマンドが利用できます。
+
+- 鍵作成: `noctivault key gen`（既定: `~/.config/noctivault/local.key`、権限600）
+- 暗号化: `noctivault local seal <dir> --key-file ~/.config/noctivault/local.key`（または `--passphrase`/`--prompt`）
+- 復号: `noctivault local unseal <enc> --key-file ...`（または `--passphrase`/`--prompt`）
+- 検証: `noctivault local verify <enc> --key-file ...`
+
+環境変数での指定（ランタイム時）
+
+- `NOCTIVAULT_LOCAL_KEY_FILE`（キーファイルパス）
+- `NOCTIVAULT_LOCAL_PASSPHRASE`（パスフレーズ）
+
+## .gitignore 推奨
+
+リポジトリには暗号化ファイルのみを含め、平文は除外してください。
+
+```
+noctivault.local-store.yaml
+local.key
+```
+
 ## Encrypted Local Store（.yaml.enc）
 
-暗号化ファイル `noctivault.local-store.yaml.enc` を優先して利用できます（仕様は docs/api.md を参照）。典型的な運用:
+暗号化ファイル `noctivault.local-store.yaml.enc` を優先して利用できます（仕様は docs/api.md を参照）。KDF は Argon2id を使用します（`pip install 'noctivault[local-enc]'`）。典型的な運用:
 
 - 初回セットアップ
   - `pip install 'noctivault[local-enc]'`
