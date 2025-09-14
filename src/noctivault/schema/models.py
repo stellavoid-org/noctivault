@@ -16,12 +16,18 @@ class SecretMock(BaseModel):
 
     @property
     def effective_platform(self) -> str:
-        # Runtime-filled by TopLevelConfig validation context via inheritance
-        return getattr(self, "_effective_platform", self.platform)  # type: ignore[attr-defined]
+        # Runtime-filled by TopLevelConfig validation context via inheritance.
+        # TopLevelConfig requires platform, so the effective value is always str here.
+        v = getattr(self, "_effective_platform", self.platform)
+        assert isinstance(v, str)
+        return v
 
     @property
     def effective_project(self) -> str:
-        return getattr(self, "_effective_project", self.gcp_project_id)  # type: ignore[attr-defined]
+        # See note above: TopLevelConfig requires gcp_project_id; cast to str is safe.
+        v = getattr(self, "_effective_project", self.gcp_project_id)
+        assert isinstance(v, str)
+        return v
 
     @model_validator(mode="after")
     def _coerce_value_to_str(self) -> "SecretMock":
@@ -36,7 +42,7 @@ class SecretRef(BaseModel):
     gcp_project_id: str
     cast: str  # leaf key name
     ref: str
-    version: int | Literal["latest"] | None = None
+    version: int | Literal["latest"] = "latest"
     type: AllowedType | None = None
 
     @model_validator(mode="after")
@@ -45,11 +51,7 @@ class SecretRef(BaseModel):
             self.type = "str"
         return self
 
-    @model_validator(mode="after")
-    def _default_version(self) -> "SecretRef":
-        if self.version is None:
-            self.version = "latest"
-        return self
+    # version has a concrete default; no after-validator needed
 
 
 class SecretGroup(BaseModel):

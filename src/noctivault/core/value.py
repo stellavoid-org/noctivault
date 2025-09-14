@@ -34,7 +34,8 @@ class SecretValue:
             return str(candidate) == self._raw
         if self._type == "int":
             try:
-                return int(candidate) == self.cast()
+                # Compare as integers without relying on Any-typed cast()
+                return int(candidate) == int(self._raw)
             except Exception as exc:
                 raise TypeCastError(candidate) from exc
         return False

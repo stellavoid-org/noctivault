@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from noctivault.tree.node import SecretNode
 
 from noctivault.app.resolver import SecretResolver
 from noctivault.io.fs import resolve_local_store_path
@@ -24,7 +27,7 @@ class Noctivault:
     _raw_index: dict[str, str] | None = None  # path -> raw string for display_hash
     _type_index: dict[str, str] | None = None  # path -> type ("str"|"int")
 
-    def load(self, local_store_path: str = "../"):
+    def load(self, local_store_path: str = "../") -> "SecretNode":
         if self.settings.source != "local":
             raise NotImplementedError("remote source not implemented")
         cfg_path = resolve_local_store_path(local_store_path)
@@ -39,12 +42,13 @@ class Noctivault:
         raw_index: dict[str, str] = {}
         type_index: dict[str, str] = {}
 
-        def walk(prefix: list[str], obj: Any):
+        def walk(prefix: list[str], obj: Any) -> None:
             from noctivault.core.value import SecretValue
             from noctivault.tree.node import SecretNode
 
             if isinstance(obj, SecretNode):
-                for k, v in obj._data.items():  # type: ignore[attr-defined]
+                # traverse internal mapping via typed accessor
+                for k, v in obj._as_mapping().items():
                     walk(prefix + [k], v)
                 return
             if isinstance(obj, dict):
@@ -54,7 +58,7 @@ class Noctivault:
             if isinstance(obj, SecretValue):
                 path = ".".join(prefix)
                 raw_index[path] = obj.get()
-                type_index[path] = obj._type  # type: ignore[attr-defined]
+                type_index[path] = obj._type
 
         walk([], node)
         self._secrets = node
@@ -62,7 +66,7 @@ class Noctivault:
         self._type_index = type_index
         return node
 
-    def _ensure_loaded(self):
+    def _ensure_loaded(self) -> None:
         if self._secrets is None:
             raise RuntimeError("secrets not loaded; call load() first")
 

@@ -16,7 +16,7 @@ class SecretResolver:
     def resolve(self, cfg: TopLevelConfig) -> SecretNode:
         refs: List[tuple[list[str], SecretRef]] = []
         if cfg.secret_refs:
-            for entry in cfg.secret_refs:  # type: ignore[iteration-over-optional]
+            for entry in cfg.secret_refs:
                 if isinstance(entry, SecretGroup):
                     for child in entry.children:
                         refs.append(([entry.key, child.cast], child))

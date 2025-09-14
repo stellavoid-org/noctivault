@@ -1,7 +1,7 @@
 # Noctivault — API Reference (Draft)
 
 > Version: 0.1.0 (MVP)
-> Status: Draft — **`settings` と `client` を分離**。`source` は `local` を実装、`remote` は予約。
+> Status: Draft — **`settings` と `client` を分離**。`source` は `local` を実装、`remote` は予約。暗号化ローカルストア（`.yaml.enc`）の仕様を追加（実装予定）。
 
 ---
 
@@ -15,6 +15,7 @@ Noctivault は、クラウドの Secret Manager から **環境変数を経由�
 サポート状態:
 
 * `source: "local"` — ローカル YAML (`noctivault.local-store.yaml`) からロード。
+* `local encrypted` — 暗号化 YAML（`noctivault.local-store.yaml.enc`）を優先してロードし、内部で復号後に既存フローで解決（本ドキュメントで仕様定義、実装予定）。
 * `source: "remote"` — Secret Manager バックエンド（GCP/AWS/Azure）用。*v0.2.0では未実装*。
 
 値は `pydantic.SecretStr` などにキャストされ、`repr/str` は `***` にマスクされます。
@@ -114,6 +115,80 @@ secret-mocks:                 # required, list of mock entries
 
 ---
 
+## Local Store Encryption（仕様・設計）
+
+平文の `noctivault.local-store.yaml` を暗号化して `noctivault.local-store.yaml.enc` として配布可能にします。ランタイムは `.enc` を優先して読み、内部で復号後に既存のスキーマ検証と解決フローを実行します。
+
+要点
+
+- 優先順位: `.yaml.enc` が存在すればそれを使用。無ければ従来の `.yaml` を使用。
+- 暗号方式: AES-256-GCM（AEAD）。改ざん時は復号失敗。
+- KDF（passphrase モード時）: Argon2id（salt/メモリ/時間/並列のパラメータをヘッダに格納）。
+- 鍵配布: 2モード併用（key-file / passphrase）。デフォルトは key-file。
+- 依存パッケージ（extras）: `cryptography`, `argon2-cffi`（`pip install 'noctivault[local-enc]'`）。
+
+暗号化ファイル仕様（NVLE1）
+
+- ヘッダマジック: `NVLE1`
+- fields:
+  - algo: `AES-256-GCM`
+  - nonce: 12 bytes（ランダム）
+  - kdf: `argon2id`（passphrase の時のみ）+ salt, mem, time, parallel
+  - ciphertext: UTF-8 の YAML 平文を暗号化した本体
+  - tag: GCM 認証タグ
+- エンコード: バイナリ（将来的に ASCII armor をオプション追加可）。
+
+鍵の扱い
+
+- key-file モード（推奨・非対話運用に適）：
+  - 256-bit ランダム鍵（生成コマンドで作成）。
+  - 既定配置: `~/.config/noctivault/local.key`（権限 600）。
+  - ランタイムは設定から鍵ファイルを参照、復号に使用。
+- passphrase モード（人間フレンドリ）：
+  - 対話でパスフレーズを取得し、Argon2id で鍵導出。
+  - ランタイムはフック/プロンプトでパスフレーズを受け取り復号。
+
+設定拡張（計画）
+
+```python
+class NoctivaultSettings(BaseModel):
+    source: str = "local"
+    # 暗号化ローカルストア向け設定（任意）
+    local_enc: LocalEncSettings | None = None
+
+class LocalEncSettings(BaseModel):
+    mode: Literal["key-file", "passphrase"] = "key-file"
+    key_file_path: str | None = None         # default: ~/.config/noctivault/local.key
+    key_provider: Callable[[], bytes] | None = None  # 直接鍵を供給する場合
+    passphrase_prompt: bool = False          # True のとき対話で問い合わせ
+```
+
+解決フロー（`source==local` の場合）
+
+- パス解決時に `.yaml.enc` を優先探索。存在すれば復号して YAML テキストを得る。
+- 復号成功後は従来どおり `TopLevelConfig` で検証し、`SecretResolver` で解決。
+- エラー種別（例）:
+  - `InvalidEncHeaderError`（ヘッダ不正）
+  - `DecryptError`（鍵不一致/タグ検証失敗）
+  - `MissingKeyMaterialError`（鍵未提供）
+
+CLI（事前処理ツール、仕様）
+
+- `noctivault key gen [--out <path>]` — 256-bit 鍵を生成（600 権限）。
+- `noctivault local seal <path> [--mode key-file|passphrase] [--key-file <path>] [--force] [--rm-plain]`
+  - `<path>` がディレクトリの場合、直下の `noctivault.local-store.yaml` を読み、同じ場所に `noctivault.local-store.yaml.enc` を出力。
+  - `--rm-plain` 指定時は平文を削除（推奨: まずは VCS から除外しておく）。
+- `noctivault local unseal <path> [--stdout|--out <file>]` — 復号確認/デバッグ用。
+- `noctivault local verify <path>` — 復号検証のみを行い、終了コードで結果を返す。
+
+運用ガイドライン
+
+- 平文 `.yaml` は VCS に含めない（`.gitignore` 推奨）。
+- `.yaml.enc` をコミット/配布し、鍵は安全なチャネルで配備（key-file モード推奨）。
+- 改ざん検知は GCM タグで担保されるため、復号失敗時は直ちに失敗として扱う。
+
+---
+
 ## File Format — Local/Remote Reference
 
 **Filename**: `noctivault.reference.yaml`
@@ -153,6 +228,7 @@ secret-refs:
 
 source==local の場合の解決フローを明文化します。
 
+- ファイル選択: `.yaml.enc` を優先、無ければ `.yaml`。`.yaml.enc` の場合は復号に成功してから以下を実施。
 - secret-refs の各エントリについて、`platform`, `gcp_project_id`, `ref`, `version` をキーとして secret-mocks を検索する。
   - secret-mocks 側の `platform`/`gcp_project_id` はエントリ指定があればそれを、無ければドキュメントのトップレベル値を用いる（effective 値）。refs 側の値と一致するものを対象に検索する。
 - `version` が `latest` または未指定なら、secret-mocks 内の同一 `(platform, gcp_project_id, name=ref)` の最大の整数版を選ぶ（この段階ではスキーマ検証済み）。

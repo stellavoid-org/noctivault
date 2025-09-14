@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Mapping, cast
 
 from noctivault.core.value import SecretValue
 from pydantic import SecretStr
@@ -37,6 +37,12 @@ class SecretNode:
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
+    def _as_mapping(self) -> Mapping[str, Any]:
+        """Internal typed accessor for underlying mapping used by the client walker.
+        Exposes a read-only view to satisfy type-checker without touching private fields.
+        """
+        return self._data
+
     def to_dict(self, reveal: bool = False) -> Dict[str, Any]:
         def walk(x: Any) -> Any:
             if isinstance(x, dict):
@@ -48,7 +54,9 @@ class SecretNode:
                 return x.get_secret_value() if reveal else "***"
             return x
 
-        return walk(self._data)
+        # walk returns Any by construction; result is a nested dict[str, Any].
+        # Narrow the type for callers. This is safe because branches return dicts.
+        return cast(Dict[str, Any], walk(self._data))
 
     def __repr__(self) -> str:
         return f"SecretNode({self.to_dict(False)})"
