@@ -34,6 +34,7 @@ If you don't have permission to access Secret Manager, grant a role to your sign
 
 Create a bucket once (outside Terraform) to store Terraform state.
 - Console → Storage → Buckets → `+ Create`
+  ![Create secret form](../assets/cloud_storage_create_top.png)
   - Name: `this-is-ricky-rehivo-s-sample-gcs-bucket` (example) # FIXME: CAUTION: GCS bucket name is GLOBALLY unique. Use original name with your name.
   - Location: `us-east1`
   - Default storage class: `Standard`
