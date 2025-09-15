@@ -6,25 +6,25 @@
 If you don't have permission to access Secret Manager, grant a role to your signed-in principal.
 - Open IAM → click your principal to edit
   
-  ![Open IAM principal edit](../asset/iam_edit_top.png)
+  ![Open IAM principal edit](../assets/iam_edit_top.png)
 - Click `+ Add another role`
   
-  ![Add another role](../asset/iam_add_another_role.png)
+  ![Add another role](../assets/iam_add_another_role.png)
 - Select `Secret Manager Admin` (or a least-privileged equivalent) and save
   
-  ![Select Secret Manager Admin](../asset/iam_select_manager_secret_admin.png)
+  ![Select Secret Manager Admin](../assets/iam_select_manager_secret_admin.png)
 - Done
 
 ### 2. Secret Manager
 - Enable the Secret Manager API if disabled
   
-  ![Enable Secret Manager API](../asset/enable_secret_manager_api.png)
+  ![Enable Secret Manager API](../assets/enable_secret_manager_api.png)
 - Click `+ Create secret`
   
-  ![Create secret](../asset/create_secret_manager_secret_top.png)
+  ![Create secret](../assets/create_secret_manager_secret_top.png)
 - Enter `Name` and `Secret value` (example: `my-secret-name`, `ThisIsASensitiveSecret`)
   
-  ![Create secret form](../asset/create_secret_manager_secret_edit.png)
+  ![Create secret form](../assets/create_secret_manager_secret_edit.png)
 - Done
 
 
