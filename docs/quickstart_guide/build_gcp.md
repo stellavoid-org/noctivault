@@ -106,7 +106,7 @@ Add this resource to a separate “bootstrap” config or workspace:
 ```hcl
 resource "google_storage_bucket" "tfstate_bucket" {
   project  = var.project_id
-  name     = "this-is-ricky-rehivo-s-sample-gcs-bucket"  # existing bucket name
+  name     = "this-is-ricky-rehivo-s-sample-gcs-bucket"  # FIXME: change to your bucket
   location = "us-east1"
 
   storage_class                   = "STANDARD"
